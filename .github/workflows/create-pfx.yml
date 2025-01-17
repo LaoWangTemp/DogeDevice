@@ -1,0 +1,77 @@
+name: create-pfx
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+on:
+  workflow_call:
+    outputs:
+      pfx-base64:
+        description: "Base64 Value of signingCert.pfx"
+        value: ${{ jobs.create-pkcs12.outputs.pfx-base64 }}
+      pfx-sha1:
+        description: "SHA1 Hash of signingCert.pfx"
+        value: ${{ jobs.create-pkcs12.outputs.pfx-sha1 }}
+      base64:
+        description: "Base64 Value of signingCert.pfx"
+        value: ${{ jobs.create-pkcs12.outputs.base64 }}
+      sha1:
+        description: "SHA1 Hash of signingCert.pfx"
+        value: ${{ jobs.create-pkcs12.outputs.sha1 }}
+      test:
+        description: "SHA1 Hash of signingCert.pfx"
+        value: ${{ jobs.create-pkcs12.outputs.test }}
+
+jobs:
+  create-pkcs12:
+    runs-on: ubuntu-24.04
+    outputs:
+      pfx-base64: ${{ steps.x509.outputs.pfx-base64 }}
+      pfx-sha1: ${{ steps.x509.outputs.pfx-sha1 }}
+      base64: ${{ steps.base64.outputs.pfx }}
+      sha1: ${{ steps.sha1.outputs.pfx }}
+      test: ${{ steps.x509.outputs.test}}
+    steps:
+    - name: Set up OpenSSL
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y openssl
+    - name: Generate PFX file
+      id: x509
+      run: |
+        openssl genrsa -out signingCert.key 2048
+        openssl req -new -key signingCert.key -out signingCert.csr -subj "/C=US/ST=California/L=San Francisco/O= ${GITHUB_REPOSITORY_OWNER} Inc./OU=Software Engineering/CN=${GITHUB_REPOSITORY_OWNER}"
+        openssl x509 -req -in signingCert.csr -signkey signingCert.key -out signingCert.crt -days 36500
+        openssl pkcs12 -export -out signingCert.pfx -inkey signingCert.key -in signingCert.crt -passout pass:${{ secrets.WINDOWS_PFX_PASSWD }}
+        echo "pfx-base64=$(base64 -w 0 signingCert.pfx)" >> $GITHUB_OUTPUT
+        echo "pfx-sha1=$(sha1sum signingCert.pfx | awk '{print $1}')" >> $GITHUB_OUTPUT
+        echo "test=23333" >> $GITHUB_OUTPUT
+
+    - name: Generate Certificate and Private Key
+      run: |
+        openssl req -newkey rsa:2048 \
+          -nodes -x509 -days 36500 \
+          -keyout privateKey.key \
+          -out certificate.cer \
+          -subj "/C=US/ST=California/L=San Francisco/O=${GITHUB_REPOSITORY_OWNER} Inc./OU=Software Engineering/CN=${GITHUB_REPOSITORY_OWNER}"
+    - name: Generate PKCS12 certificate
+      id: base64
+      run: |
+        openssl pkcs12 -export \
+          -in certificate.cer \
+          -inkey privateKey.key \
+          -out signingCert.pfx \
+          -passout pass:${{ secrets.WINDOWS_PFX_PASSWD }}
+        echo "pfx=$(base64 -w 0 signingCert.pfx)" >> $GITHUB_OUTPUT
+    - name: Calculate PFX SHA1 Hash
+      id: sha1
+      run: |
+        sha1=$(openssl dgst -sha1 signingCert.pfx | awk '{print $2}')
+        echo "pfx=${sha1}" >> $GITHUB_OUTPUT
+    - name: Restore PFX Certificate
+      run: |
+        echo "${{ steps.base64.outputs.pfx }}" | base64 -d > signingCert.pfx
+        # Verify the file was created correctly
+        ls -l signingCert.pfx
+        echo "${{ steps.x509.outputs.pfx-base64 }}" | base64 -d > signingCert.pfx
+        ls -l signingCert.pfx

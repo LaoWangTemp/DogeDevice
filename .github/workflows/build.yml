@@ -1,0 +1,120 @@
+name: build
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        default: 'pubspec.yaml'
+        required: true
+        type: string
+      target:
+        required: true
+        type: string
+        description: "Build target (android, ios, linux, macos, windows, web)"
+      build-args:
+        required: true
+        type: string
+        description: "Flutter Building Args"
+      platform:
+        required: true
+        type: string
+        description: "Running Platform"
+
+permissions:
+  contents: write
+
+jobs:
+  ready:
+    uses: ./.github/workflows/get-info.yml
+    with:
+      path: ${{ inputs.path }}
+      target: ${{ inputs.target }}
+
+  pkcs12:
+    uses: ./.github/workflows/create-pfx.yml
+    secrets: inherit
+
+  build:
+    runs-on: ${{ inputs.platform }}
+    needs:
+      - ready
+      - pkcs12
+    steps:
+      - uses: actions/checkout@v4
+      - if: ${{ inputs.target == 'linux' }}
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ninja-build libgtk-3-dev
+        shell: bash
+      - if: ${{ inputs.target == 'windows' }}
+        run: |
+          choco install yq
+          Invoke-WebRequest -Uri "https://github.com/Delphier/SignTool/releases/download/v10.0.22621.6/SignTool-10.0.22621.6-x64.zip" -OutFile "SignTool.zip"
+          Expand-Archive -Path "SignTool.zip" -DestinationPath "SignTool" -Force
+      -
+        name: Set up Flutter
+        uses: subosito/flutter-action@v2.18.0
+        with:
+          channel: stable
+          flutter-version-file: ${{ inputs.path }}
+      -
+        run: flutter --version
+      -
+        run: flutter pub get
+      -
+        run: flutter test
+      -
+        run: flutter ${{ inputs.build-args }}
+      -
+        run: echo "${{ needs.pkcs12.outputs.pfx-base64 }}" | base64 -d > signingCert.pfx
+        shell: bash
+      - if: ${{ inputs.platform == 'macos-latest' }}
+        run: |
+          BIN="${{ needs.ready.outputs.name_full }}.app"
+          RELEASE="${{ needs.ready.outputs.name_full }}-${{ needs.ready.outputs.version }}-${{ inputs.target }}"
+
+          mv "${{ needs.ready.outputs.release }}" "$BIN"
+          hdiutil create -volname "${{ needs.ready.outputs.name_full }}" -srcfolder "$BIN" -ov -format UDZO "$RELEASE"
+          gh release upload ${{ needs.ready.outputs.version }} "$RELEASE.dmg" --clobber
+        shell: bash
+        name: Upload(mac/ios img)
+
+      - 
+        if: ${{ inputs.target == 'linux' || inputs.target == 'web'}}
+        run: |
+          RELEASE="${{ needs.ready.outputs.name_full }}-${{ needs.ready.outputs.version }}-${{ inputs.target }}.zip"
+          cd "${{ needs.ready.outputs.release }}" && zip -r "$RELEASE" ./*
+          gh release upload ${{ needs.ready.outputs.version }} "$RELEASE" --clobber
+
+        shell: bash
+        name: Upload(linux/web)
+
+      - 
+        if: ${{ inputs.target == 'android' }}
+        run: |
+          RELEASE="${{ needs.ready.outputs.name_full }}-${{ needs.ready.outputs.version }}-${{ inputs.target }}.apk"
+
+          mv "${{ needs.ready.outputs.release }}" "$RELEASE"
+          gh release upload ${{ needs.ready.outputs.version }} "$RELEASE" --clobber
+
+        shell: bash
+        name: Upload(android apk)
+
+      - if: ${{ inputs.target == 'windows' }}
+        run: |
+          $zip = "${{ needs.ready.outputs.name_full }}-${{ needs.ready.outputs.version }}-${{ inputs.target }}.zip"
+          $raw = "${{ needs.ready.outputs.release }}/${{ needs.ready.outputs.name_lower }}.exe"
+          $bin = "${{ needs.ready.outputs.release }}/${{ needs.ready.outputs.name_full }}.exe"
+
+          Move-Item -Path "$raw" "$bin"
+          ./SignTool/signtool.exe sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /a /f signingCert.pfx /p "${{ secrets.WINDOWS_PFX_PASSWD }}" "$bin"
+
+          cd (Split-Path -Path "${{ needs.ready.outputs.release }}" -Parent)
+          Move-Item -Path "Release" -Destination "${{ needs.ready.outputs.name_full }}"
+          Compress-Archive -Path "${{ needs.ready.outputs.name_full }}" -DestinationPath $zip -CompressionLevel Optimal
+          gh release upload "${{ needs.ready.outputs.version }}" "$zip" --clobber
+        shell: pwsh
+        name: Upload(windows zip)

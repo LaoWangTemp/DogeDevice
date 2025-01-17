@@ -1,0 +1,37 @@
+name: create-release
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        default: '0'
+        required: true
+        type: string
+      note:
+        default: 'None'
+        required: true
+        type: string
+    outputs:
+      pushed_tag:
+        description: "Pushed tag version"
+        value: ${{ jobs.create-release.outputs.pushed_tag }}
+jobs:
+  create-release:
+    runs-on: ubuntu-24.04
+    outputs:
+      pushed_tag: ${{ steps.release.outputs.pushed_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - 
+        id: release
+        run: |
+          gh release create $PUSH_TAG --notes "$NOTE"
+          echo pushed_tag=$PUSH_TAG >> $GITHUB_OUTPUT
+        name: Release
+        shell: bash
+        env:
+          PUSH_TAG: ${{ inputs.tag }}
+          NOTE: ${{ inputs.note }}
