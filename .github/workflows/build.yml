@@ -114,7 +114,10 @@ jobs:
 
           cd (Split-Path -Path "${{ needs.ready.outputs.release }}" -Parent)
           Move-Item -Path "Release" -Destination "${{ needs.ready.outputs.name_full }}"
-          Compress-Archive -Path "${{ needs.ready.outputs.name_full }}" -DestinationPath $zip -CompressionLevel Optimal
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::CreateFromDirectory($packageDir, $zipName, 
+            [System.IO.Compression.CompressionLevel]::Optimal, $false)
+          
           gh release upload "${{ needs.ready.outputs.version }}" "$zip" --clobber
         shell: pwsh
         name: Upload(windows zip)

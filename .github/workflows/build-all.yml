@@ -52,7 +52,7 @@ jobs:
             platform: ubuntu-20.04
             build-args: "build web --release"
           - target: windows
-            platform: windows-2019
+            platform: windows-latest
             build-args: "build windows --release"
     uses: ./.github/workflows/build.yml
     with:
