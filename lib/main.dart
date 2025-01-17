@@ -118,27 +118,28 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
   }
 
   Future<Map<String, dynamic>> _readWindowsDeviceInfo() async {
-    // Initialize Windows System Info
     await WindowsSystemInfo.initWindowsInfo(
       requiredValues: [WindowsSystemInfoFeat.all],
     );
-
-    // Wait for initialization to complete and check state
     if (await WindowsSystemInfo.isInitilized) {
-      // System Information
       final deviceInfo = <String, dynamic>{
         'User Name': WindowsSystemInfo.userName,
         'Device Name': WindowsSystemInfo.deviceName,
       };
 
-      // OS Information
+      final staticInfo = WindowsSystemInfo.windowsSystemStaticInformation;
+
+      if (staticInfo != null) {
+        deviceInfo.addAll({
+          'staticInfo': staticInfo,
+        });
+      }
       if (WindowsSystemInfo.os != null) {
         deviceInfo.addAll({
           'OS Architecture': WindowsSystemInfo.is64bit ? '64-bit' : '32-bit',
         });
       }
 
-      // System Information
       if (WindowsSystemInfo.system != null) {
         deviceInfo.addAll({
           'Manufacturer': WindowsSystemInfo.system?.manufacturer,
