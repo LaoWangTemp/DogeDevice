@@ -1,6 +1,6 @@
-// main.dart
 import 'package:flutter/material.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:windows_system_info/windows_system_info.dart';
 import 'dart:io';
 
 void main() {
@@ -45,15 +45,13 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
 
     try {
       if (Platform.isAndroid) {
-        deviceData =
-            _readAndroidDeviceInfo(await _deviceInfoPlugin.androidInfo);
+        deviceData = _readAndroidDeviceInfo(await _deviceInfoPlugin.androidInfo);
       } else if (Platform.isIOS) {
         deviceData = _readIosDeviceInfo(await _deviceInfoPlugin.iosInfo);
       } else if (Platform.isMacOS) {
         deviceData = _readMacOsDeviceInfo(await _deviceInfoPlugin.macOsInfo);
       } else if (Platform.isWindows) {
-        deviceData =
-            _readWindowsDeviceInfo(await _deviceInfoPlugin.windowsInfo);
+        deviceData = await _readWindowsDeviceInfo();
       } else if (Platform.isLinux) {
         deviceData = _readLinuxDeviceInfo(await _deviceInfoPlugin.linuxInfo);
       }
@@ -119,20 +117,47 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
     };
   }
 
-  Map<String, dynamic> _readWindowsDeviceInfo(WindowsDeviceInfo info) {
-    return {
-      'Computer Name': info.computerName,
-      'Number of Cores': info.numberOfCores,
-      'System Memory':
-          '${(info.systemMemoryInMegabytes / 1024).toStringAsFixed(2)} GB',
-      'Product ID': info.productId,
-      'Product Name': info.productName,
-      'Edition': info.editionId,
-      'Build Number': info.buildNumber,
-      'Platform ID': info.platformId,
-      'OS Version': info.displayVersion,
-      'Device ID': info.deviceId,
-    };
+  Future<Map<String, dynamic>> _readWindowsDeviceInfo() async {
+    // Initialize Windows System Info
+    await WindowsSystemInfo.initWindowsInfo(
+      requiredValues: [WindowsSystemInfoFeat.all],
+    );
+
+    // Wait for initialization to complete and check state
+    if (await WindowsSystemInfo.isInitilized) {
+      // System Information
+      final deviceInfo = <String, dynamic>{
+        'User Name': WindowsSystemInfo.userName,
+        'Device Name': WindowsSystemInfo.deviceName,
+      };
+
+      // OS Information
+      if (WindowsSystemInfo.os != null) {
+        deviceInfo.addAll({
+          'OS Architecture': WindowsSystemInfo.is64bit ? '64-bit' : '32-bit',
+        });
+      }
+
+      // System Information
+      if (WindowsSystemInfo.system != null) {
+        deviceInfo.addAll({
+          'Manufacturer': WindowsSystemInfo.system?.manufacturer,
+          'Model': WindowsSystemInfo.system?.model,
+        });
+      }
+
+      if (WindowsSystemInfo.chassis != null) {
+        deviceInfo.addAll({
+          'Chassis': WindowsSystemInfo.chassis,
+        });
+      }
+
+      deviceInfo['Processor'] = WindowsSystemInfo.cpu;
+
+      return deviceInfo;
+    } else {
+      return {'Error': 'Failed to initialize Windows System Info'};
+    }
   }
 
   Map<String, dynamic> _readLinuxDeviceInfo(LinuxDeviceInfo info) {

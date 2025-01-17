@@ -1,6 +1,6 @@
 name: dogedevice
 description: "A new Flutter project."
-version: 0.0.3
+version: 0.0.4
 
 environment:
   sdk: ">=3.6.1 <4.0.0"
@@ -12,6 +12,7 @@ dependencies:
 
   cupertino_icons: ^1.0.8
   device_info_plus: ^11.2.1
+  windows_system_info: ^0.0.4
 
 dev_dependencies:
   flutter_test:
